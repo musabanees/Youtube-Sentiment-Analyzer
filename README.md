@@ -35,15 +35,13 @@ http://localhost:5000/predict
 ```
 
 
-
-chrome://extensions
-
-
-## how to get youtube api key from gcp:
-
-https://www.youtube.com/watch?v=i_FdiQMwKiw
-
-
+## To-do
+- Create the utils file separately in the src/youtube_sentiment folder and add redudant functions
+- Add the model name in the params.yaml file under model_registry (Reference: register_model.py) 
+- Get the latest model by Tag (Latest), then register the model with its run ID
+- Create the A/B Testing
+- Create the CI/CD
+       
 
 # AWS-CICD-Deployment-with-Github-Actions
 
