@@ -1,9 +1,87 @@
+# Ran the command to select different models for experiments
+# dvc exp run -S experiments.Model=random_forest
+# dvc exp run -S experimen
+
+# Current active environment 
+active_environment: dev
+
+environments:
+  dev: # Build & Experimentation Environment
+    Model: lightgbm  # Reference to models section
+    vectorizers: tfidf  # Reference to vectorizers section
+    monitoring:
+      log_level: DEBUG
+      mlflow_tracking: true
+      experiment_name: dvc-pipeline-runs
+
+  acc: # Test like production Environment
+    Model: None
+    vectorizers: None 
+    monitoring:
+      log_level: None
+      mlflow_tracking: false
+
+  prd: # Production Environment
+    Model: lightgbm
+    vectorizers: tfidf 
+    model_registry:
+      name: "LightGBM-Sentiment"
+      stage: "Production" 
+      alias: "latest-model"
+      run_id: 1c7aa37e8cd047ad81b4737aaa7c3fb4
+
+Model:
+  random_forest:
+    type: RandomForestClassifier
+    params:
+      n_estimators: 100
+      max_depth: 10
+      random_state: 42
+
+  gradient_boosting:
+    type: GradientBoostingClassifier
+    params:
+      n_estimators: 100
+      learning_rate: 0.1
+      max_depth: 3
+      random_state: 42
+  lightgbm:
+    type: LGBMClassifier
+    params:
+      n_estimators: 367
+      learning_rate: 0.09
+      max_depth: 15
+      random_state: 42
+      objective: multiclass
+      num_class: 3
+      is_unbalance: true
+      class_weight: balanced
+      reg_alpha: 0.1  # L1 regularization
+      reg_lambda: 0.1  # L2 regularization
+
 data_ingestion:
   test_size: 0.20
 
-model_building:
-  ngram_range: [1, 3]  
-  max_features: 1000
-  learning_rate: 0.09
-  max_depth: 20
-  n_estimators: 367
+vectorizers:
+  # TF-IDF vectorizer settings
+  tfidf:
+    ngram_range: [1, 3]
+    max_features: 800
+    
+  # Count vectorizer settings
+  count:
+    ngram_range: [1, 2]
+    max_features: 1500
+    min_df: 3
+    max_df: 0.8
+    analyzer: "word"
+    stop_words: "english"
+    
+  # Word2Vec settings
+  word2vec:
+    vector_size: 100
+    window: 5
+    min_count: 3
+    workers: 4
+    sg: 1  # 1 for skip-gram, 0 for CBOW
+    

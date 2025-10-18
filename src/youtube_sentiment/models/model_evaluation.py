@@ -4,14 +4,29 @@ import pickle
 import logging
 import yaml
 import mlflow
+from pathlib import Path
+import os
+import matplotlib.pyplot as plt
+from dotenv import load_dotenv
+import seaborn as sns
+import json
+
+import git
+from youtube_sentiment.config import Tags
+
 import mlflow.sklearn
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.feature_extraction.text import TfidfVectorizer
-import os
-import matplotlib.pyplot as plt
-import seaborn as sns
-import json
 from mlflow.models import infer_signature
+
+
+load_dotenv()
+tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
+
+# Get git information
+repo = git.Repo(search_parent_directories=True)
+git_sha = repo.head.object.hexsha
+branch = repo.active_branch.name
 
 # logging configuration
 logger = logging.getLogger('model_evaluation')
@@ -95,7 +110,7 @@ def evaluate_model(model, X_test: np.ndarray, y_test: np.ndarray):
         raise
 
 
-def log_confusion_matrix(cm, dataset_name):
+def log_confusion_matrix(root_dir, cm, dataset_name):
     """Log confusion matrix as an artifact."""
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
@@ -104,7 +119,7 @@ def log_confusion_matrix(cm, dataset_name):
     plt.ylabel('Actual')
 
     # Save confusion matrix plot as a file and log it to MLflow
-    cm_file_path = f'confusion_matrix_{dataset_name}.png'
+    cm_file_path = os.path.join(root_dir, f'resources/confusion_matrix_{dataset_name}.png')
     plt.savefig(cm_file_path)
     mlflow.log_artifact(cm_file_path)
     plt.close()
@@ -125,25 +140,69 @@ def save_model_info(run_id: str, model_path: str, file_path: str) -> None:
         logger.error('Error occurred while saving the model info: %s', e)
         raise
 
+def get_root_directory() -> str:
+    """Get the root directory (three levels up from this script's location)."""
+    file_path = Path(__file__).resolve()
+    project_root = file_path.parents[3]
+    return str(project_root)
+
+def log_parameters(env_config: dict, active_env: str, params: dict) -> None:
+    # Get model and vectorizer type from active environment
+    model_type = env_config['Model']
+    vectorizer_type = env_config['vectorizers']
+
+    # Log environment info
+    mlflow.log_param("environment", active_env)
+    mlflow.log_param("model_type", model_type)
+    mlflow.log_param("vectorizer_type", vectorizer_type)
+
+    # Log only the relevant model parameters (for the selected model)
+    if model_type in params['Model']:
+        model_params = params['Model'][model_type]['params']
+        for param_name, param_value in model_params.items():
+            mlflow.log_param(f"model.{param_name}", param_value)
+
+    # Log only the relevant vectorizer parameters
+    if vectorizer_type in params['vectorizers']:
+        vectorizer_params = params['vectorizers'][vectorizer_type]
+        for param_name, param_value in vectorizer_params.items():
+            # Handle list parameters like ngram_range
+            if isinstance(param_value, list):
+                param_value = str(tuple(param_value))
+            mlflow.log_param(f"vectorizer.{param_name}", param_value)
+
+
 
 def main():
-    mlflow.set_tracking_uri("http://ec2-52-91-160-21.compute-1.amazonaws.com:5000/")
 
-    mlflow.set_experiment('dvc-pipeline-runs')
+    # Load parameters from YAML file
+    root_dir = get_root_directory()
+    params = load_params(os.path.join(root_dir, 'params.yaml'))
+
+        
+    # Get active environment and its configuration
+    active_env = params['active_environment']
+    env_config = params['environments'][active_env]
     
-    with mlflow.start_run() as run:
+    # Get MLflow experiment name from the active environment
+    experiment_name = env_config['monitoring']['experiment_name']
+    logger.debug(f"Using experiment name from config: {experiment_name}")
+
+    mlflow.set_experiment(experiment_name)
+    mlflow.set_tracking_uri(tracking_uri)
+
+    # Create structured tags
+    tags = Tags(git_sha=git_sha, branch=branch)
+
+    with mlflow.start_run(tags=tags.to_dict()) as run:
         try:
-            # Load parameters from YAML file
-            root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
-            params = load_params(os.path.join(root_dir, 'params.yaml'))
 
             # Log parameters
-            for key, value in params.items():
-                mlflow.log_param(key, value)
-            
+            log_parameters(env_config , active_env, params)
+
             # Load model and vectorizer
-            model = load_model(os.path.join(root_dir, 'lgbm_model.pkl'))
-            vectorizer = load_vectorizer(os.path.join(root_dir, 'tfidf_vectorizer.pkl'))
+            model = load_model(os.path.join(root_dir, 'models/lgbm_model.pkl'))
+            vectorizer = load_vectorizer(os.path.join(root_dir, 'models/tfidf_vectorizer.pkl'))
 
             # Load test data for signature inference
             test_data = load_data(os.path.join(root_dir, 'data/interim/test_processed.csv'))
@@ -159,40 +218,47 @@ def main():
             signature = infer_signature(input_example, model.predict(X_test_tfidf[:5]))  # <--- Added for signature
 
             # Log model with signature
-            mlflow.sklearn.log_model(
+            model_info = mlflow.sklearn.log_model(
                 model,
                 "lgbm_model",
                 signature=signature,  # <--- Added for signature
-                input_example=input_example  # <--- Added input example
+                input_example=input_example  # <--- Added input_example
             )
 
             # Save model info
-            # artifact_uri = mlflow.get_artifact_uri()
-            model_path = "lgbm_model"
-            save_model_info(run.info.run_id, model_path, 'experiment_info.json')
+            logger.debug('Model info saved to %s', model_info.model_uri)
+            # model_path = "lgbm_model"
+            save_model_info(
+                run.info.run_id, 
+                model_info.model_uri, 
+                os.path.join(root_dir, 'resources', 'experiment_info.json')
+            )
 
             # Log the vectorizer as an artifact
-            mlflow.log_artifact(os.path.join(root_dir, 'tfidf_vectorizer.pkl'))
+            mlflow.log_artifact(os.path.join(root_dir, 'models/tfidf_vectorizer.pkl'))
 
-            # Evaluate model and get metrics
-            report, cm = evaluate_model(model, X_test_tfidf, y_test)
+            eval_data = pd.DataFrame(X_test_tfidf.toarray(), columns=vectorizer.get_feature_names_out())
+            eval_data['target'] = y_test  # Add target column
+            
+            # Run MLflow's built-in evaluation
+            result = mlflow.models.evaluate(
+                model=model_info.model_uri,  # URI to the logged model
+                data=eval_data,              # Evaluation dataset with features and target
+                targets="target",            # Target column name
+                model_type="classifier",
+                evaluators=["default"],
+            )
+            mlflow.log_metrics({
+                "eval_accuracy": result.metrics.get("accuracy_score", 0),
+                "eval_f1_weighted": result.metrics.get("f1_score_weighted", 0),
+                "eval_precision_weighted": result.metrics.get("precision_score_weighted", 0),
+                "eval_recall_weighted": result.metrics.get("recall_score_weighted", 0)
+            })
 
-            # Log classification report metrics for the test data
-            for label, metrics in report.items():
-                if isinstance(metrics, dict):
-                    mlflow.log_metrics({
-                        f"test_{label}_precision": metrics['precision'],
-                        f"test_{label}_recall": metrics['recall'],
-                        f"test_{label}_f1-score": metrics['f1-score']
-                    })
-
-            # Log confusion matrix
-            log_confusion_matrix(cm, "Test Data")
-
-            # Add important tags
-            mlflow.set_tag("model_type", "LightGBM")
-            mlflow.set_tag("task", "Sentiment Analysis")
-            mlflow.set_tag("dataset", "YouTube Comments")
+            # Log the evaluation results summary
+            logger.info(f"MLflow evaluation completed with metrics: {result.metrics}")
+            print(f"EVALUATION COMPLETE - Metrics: {result.metrics}")
+    
 
         except Exception as e:
             logger.error(f"Failed to complete model evaluation: {e}")

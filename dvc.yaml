@@ -10,49 +10,44 @@ stages:
     - data/raw/train.csv
 
   
-  # data_preprocessing:
-  #   cmd: python src/data/data_preprocessing.py
-  #   deps:
-  #   - data/raw/train.csv
-  #   - data/raw/test.csv
-  #   - src/data/data_preprocessing.py
-  #   outs:
-  #   - data/interim
+  data_preprocessing:
+    cmd: python src/youtube_sentiment/data_preprocessing.py
+    deps:
+    - data/raw/train.csv
+    - data/raw/test.csv
+    - src/youtube_sentiment/data_preprocessing.py
+    outs:
+    - data/interim
 
 
   
-  # model_building:
-  #   cmd: python src/model/model_building.py
-  #   deps:
-  #   - data/interim/train_processed.csv
-  #   - src/model/model_building.py
-  #   params:
-  #   - model_building.max_features
-  #   - model_building.ngram_range
-  #   - model_building.learning_rate
-  #   - model_building.max_depth
-  #   - model_building.n_estimators
-  #   outs:
-  #   - lgbm_model.pkl
-  #   - tfidf_vectorizer.pkl
+  model_building:
+    cmd: python src/youtube_sentiment/models/model_building.py
+    deps:
+    - data/interim/train_processed.csv
+    - src/youtube_sentiment/models/model_building.py
+    params: # track changes in these params.yaml entries
+    - active_environment
+    - Model  # tracks any change under Model/*
+    - vectorizers
+    outs:
+    - models/lgbm_model.pkl
+    - models/tfidf_vectorizer.pkl
 
 
+  model_evaluation:
+    cmd: python src/youtube_sentiment/models/model_evaluation.py
+    deps:
+    - models/lgbm_model.pkl
+    - models/tfidf_vectorizer.pkl
+    - data/interim/train_processed.csv
+    - data/interim/test_processed.csv
+    - src/youtube_sentiment/models/model_evaluation.py
+    - src/youtube_sentiment/config.py
+    outs:
+    - resources/experiment_info.json
   
-  # model_evaluation:
-  #   cmd: python src/model/model_evaluation.py
-  #   deps:
-  #   - lgbm_model.pkl
-  #   - tfidf_vectorizer.pkl
-  #   - data/interim/train_processed.csv
-  #   - data/interim/test_processed.csv
-  #   - src/model/model_evaluation.py
-  #   outs:
-  #   - experiment_info.json
-
-
-  
-  # model_registration:
-  #   cmd: python src/model/register_model.py
-  #   deps:
-  #   - experiment_info.json
-  #   - src/model/register_model.py
+  model_registration:
+    cmd: python src/youtube_sentiment/models/register_model.py
+    deps:
+    - src/youtube_sentiment/models/register_model.py

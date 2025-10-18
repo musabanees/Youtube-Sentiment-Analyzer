@@ -4,6 +4,8 @@ import os
 import pickle
 import yaml
 import logging
+from pathlib import Path
+
 import lightgbm as lgb
 from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -57,11 +59,22 @@ def load_data(file_path: str) -> pd.DataFrame:
         logger.error('Unexpected error occurred while loading the data: %s', e)
         raise
 
-
-def apply_tfidf(train_data: pd.DataFrame, max_features: int, ngram_range: tuple) -> tuple:
-    """Apply TF-IDF with ngrams to the data."""
+def apply_tfidf(train_data: pd.DataFrame, **vectorizer_params) -> tuple:
+    """Apply TF-IDF with configurable parameters to the data.
+    
+    Args:
+        train_data: DataFrame containing the text data
+        **vectorizer_params: All parameters to pass to TfidfVectorizer
+    """
     try:
-        vectorizer = TfidfVectorizer(max_features=max_features, ngram_range=ngram_range)
+
+        # Safety conversion right before instantiating the vectorizer
+        if 'ngram_range' in vectorizer_params and not isinstance(vectorizer_params['ngram_range'], tuple):
+            vectorizer_params['ngram_range'] = tuple(vectorizer_params['ngram_range'])
+            logger.debug(f"Converted ngram_range to tuple: {vectorizer_params['ngram_range']}")
+        
+        # Instantiate vectorizer with all parameters from config
+        vectorizer = TfidfVectorizer(**vectorizer_params)
 
         X_train = train_data['clean_comment'].values
         y_train = train_data['category'].values
@@ -69,41 +82,21 @@ def apply_tfidf(train_data: pd.DataFrame, max_features: int, ngram_range: tuple)
         # Perform TF-IDF transformation
         X_train_tfidf = vectorizer.fit_transform(X_train)
 
-        logger.debug(f"TF-IDF transformation complete. Train shape: {X_train_tfidf.shape}")
+        logger.debug(f"TF-IDF transformation complete. Shape: {X_train_tfidf.shape}")
+        logger.debug(f"Parameters used: {vectorizer_params}")
 
-        # Save the vectorizer in the root directory
-        with open(os.path.join(get_root_directory(), 'tfidf_vectorizer.pkl'), 'wb') as f:
+        # Create models directory if it doesn't exist
+        os.makedirs(os.path.join(get_root_directory(), 'models'), exist_ok=True)
+        
+        # Save the vectorizer in the models directory
+        with open(os.path.join(get_root_directory(), 'models/tfidf_vectorizer.pkl'), 'wb') as f:
             pickle.dump(vectorizer, f)
 
-        logger.debug('TF-IDF applied with trigrams and data transformed')
+        logger.debug('TF-IDF vectorizer saved successfully')
         return X_train_tfidf, y_train
     except Exception as e:
         logger.error('Error during TF-IDF transformation: %s', e)
         raise
-
-
-def train_lgbm(X_train: np.ndarray, y_train: np.ndarray, learning_rate: float, max_depth: int, n_estimators: int) -> lgb.LGBMClassifier:
-    """Train a LightGBM model."""
-    try:
-        best_model = lgb.LGBMClassifier(
-            objective='multiclass',
-            num_class=3,
-            metric="multi_logloss",
-            is_unbalance=True,
-            class_weight="balanced",
-            reg_alpha=0.1,  # L1 regularization
-            reg_lambda=0.1,  # L2 regularization
-            learning_rate=learning_rate,
-            max_depth=max_depth,
-            n_estimators=n_estimators
-        )
-        best_model.fit(X_train, y_train)
-        logger.debug('LightGBM model training completed')
-        return best_model
-    except Exception as e:
-        logger.error('Error during LightGBM model training: %s', e)
-        raise
-
 
 def save_model(model, file_path: str) -> None:
     """Save the trained model to a file."""
@@ -115,11 +108,11 @@ def save_model(model, file_path: str) -> None:
         logger.error('Error occurred while saving the model: %s', e)
         raise
 
-
 def get_root_directory() -> str:
-    """Get the root directory (two levels up from this script's location)."""
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.abspath(os.path.join(current_dir, '../../'))
+    """Get the root directory (three levels up from this script's location)."""
+    file_path = Path(__file__).resolve()
+    project_root = file_path.parents[3]
+    return str(project_root)
 
 
 def main():
@@ -129,27 +122,55 @@ def main():
 
         # Load parameters from the root directory
         params = load_params(os.path.join(root_dir, 'params.yaml'))
-        max_features = params['model_building']['max_features']
-        ngram_range = tuple(params['model_building']['ngram_range'])
-
-        learning_rate = params['model_building']['learning_rate']
-        max_depth = params['model_building']['max_depth']
-        n_estimators = params['model_building']['n_estimators']
-
+        
+        # Get active environment
+        active_env = params['active_environment']
+        logger.info(f"Using active environment: {active_env}")
+        
+        # Get environment-specific configuration
+        env_config = params['environments'][active_env]
+        
+        # Get selected model type from active environment
+        selected_model = env_config['Model']
+        logger.info(f"Selected model: {selected_model}")
+        
+        # Get selected vectorizer type from active environment
+        vectorizer_type = env_config['vectorizers']
+        logger.info(f"Selected vectorizer: {vectorizer_type}")
+        
         # Load the preprocessed training data from the interim directory
         train_data = load_data(os.path.join(root_dir, 'data/interim/train_processed.csv'))
+        
+        # Get vectorizer parameters
+        if vectorizer_type in params['vectorizers']:
+            vectorizer_params = params['vectorizers'][vectorizer_type]
+            logger.debug(f"Using {vectorizer_type} parameters: {vectorizer_params}")
+        else:
+            logger.warning(f"No config found for {vectorizer_type}, using defaults")
+            vectorizer_params = {'max_features': 1000, 'ngram_range': (1, 3)}
+        
+        # Apply vectorizer to data
+        X_train_tfidf, y_train = apply_tfidf(train_data, **vectorizer_params)
 
-        # Apply TF-IDF feature engineering on training data
-        X_train_tfidf, y_train = apply_tfidf(train_data, max_features, ngram_range)
+        # Get LightGBM model parameters directly
+        model_params = params['Model'][selected_model]['params']
+        logger.info(f"Training LightGBM with parameters: {model_params}")
 
-        # Train the LightGBM model using hyperparameters from params.yaml
-        best_model = train_lgbm(X_train_tfidf, y_train, learning_rate, max_depth, n_estimators)
+        best_model = lgb.LGBMClassifier(**model_params)
 
-        # Save the trained model in the root directory
-        save_model(best_model, os.path.join(root_dir, 'lgbm_model.pkl'))
+        # Train the model
+        best_model.fit(X_train_tfidf, y_train)
+        logger.info("LightGBM model training completed")
+
+        # Create models directory if it doesn't exist
+        os.makedirs(os.path.join(root_dir, 'models'), exist_ok=True)
+        
+        # Save the trained model
+        save_model(best_model, os.path.join(root_dir, 'models/lgbm_model.pkl'))
+        logger.info("Model saved as lgbm_model.pkl")
 
     except Exception as e:
-        logger.error('Failed to complete the feature engineering and model building process: %s', e)
+        logger.error('Failed to complete the model building process: %s', e)
         print(f"Error: {e}")
 
 
