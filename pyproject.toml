@@ -1,0 +1,82 @@
+# This section replaces the old setup.py.
+# It contains all the core information about your project.
+[project]
+name = "youtube_sentiment"
+version = "0.1.0" 
+description = "An end-to-end MLOps pipeline for YouTube sentiment analysis."
+requires-python = ">=3.8"
+# These are the packages your project needs to run.
+dependencies = [
+    "boto3==1.35.36",
+    "Flask==3.0.3",
+    "Flask_Cors==5.0.0",
+    "joblib==1.4.2",
+    "lightgbm==4.5.0",
+    "matplotlib==3.9.2",
+    "mlflow==2.17.0",
+    "dvc[s3]==3.53.0", 
+    "nltk==3.9.1",
+    "numpy==2.1.2",
+    "pandas==2.2.3",
+    "wordcloud==1.9.3",
+    "seaborn==0.13.2",
+    "loguru==0.7.3",
+    "python-dotenv==1.1.1",
+]
+
+# This section is for "optional" dependencies, typically for development.
+# You can install these with `pip install -e .[dev]`
+[project.optional-dependencies]
+dev = [
+    "pytest", # For running tests
+    "black",  # For code formatting
+    "ruff",   # For linting
+]
+
+# This section defines the tools needed to build your project.
+# It's standard boilerplate and rarely needs to be changed.
+[build-system]
+requires = ["setuptools>=72.0"]
+build-backend = "setuptools.build_meta"
+
+# This section tells the build tool (setuptools) where to find your actual Python code.
+[tool.setuptools.packages.find]
+where = ["src"] # Look for packages in the 'src' directory
+include = ["youtube_sentiment*"] # Find any package that starts with 'youtube_sentiment'
+
+# This section configures the testing tool, pytest.
+[tool.pytest.ini_options]
+testpaths = [ "tests" ] # Look for tests in the 'tests' directory
+pythonpath = [ "." ] # Add the project root to the Python path for imports
+
+# This section configures the linter and formatter, Ruff.
+# The settings from your sample are excellent best practices.
+[tool.ruff]
+line-length = 120
+lint.select = [
+    "F",    # pyflakes rules
+    "E",    # pycodestyle error rules
+    "W",    # pycodestyle warning rules
+    "B",    # flake8-bugbear rules
+    "I",    # isort rules
+    "UP",   # pyupgrade rules
+    "SIM",  # flake8-simplify rules
+    "ERA",  # eradicate rules
+    "C",    # pylint convention rules
+    "D",    # pydocstyle rules
+    "ANN"   # flake8-annotations rules
+]
+lint.ignore = [
+    "D107", # Missing docstring in `__init__`
+    "D203", # incorrect-blank-line-before-class
+    "D213", # multi-line-summary-second-line
+    "E501", # line-too-long
+    "C901", # too complex
+    "ERA001", # commented out code
+    "D100", # missing docstring
+    "ERA001" # commented out code
+]
+
+[tool.ruff.format]
+indent-style = "space"
+docstring-code-format = true
