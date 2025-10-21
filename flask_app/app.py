@@ -9,13 +9,26 @@ from wordcloud import WordCloud
 import mlflow
 import numpy as np
 import re
+import os
 import pandas as pd
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from mlflow.tracking import MlflowClient
 import matplotlib.dates as mdates
 import pickle
+import yaml
+import logging
+from dotenv import load_dotenv
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('youtube_sentiment_api')
+
+
+load_dotenv()
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
@@ -49,20 +62,67 @@ def preprocess_comment(comment):
         return comment
 
 
+def load_model_and_vectorizer(stage="Production"):
+    """
+    Load both model and vectorizer from MLflow artifacts by stage.
+    Returns model and vectorizer separately.
+    """
+    # Load model info from params.yaml
+    with open("../params.yaml", "r") as f:
+        params = yaml.safe_load(f)
+        
+    # Extract model registry info from production environment
+    registry_config = params["environments"]["prd"]["model_registry"]
+    model_name = registry_config["name"]
+    expected_run_id = registry_config.get("run_id")
+    
+    # Get tracking URI from environment variable (.env file)
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
+    mlflow.set_tracking_uri(tracking_uri)
+    
+    # Create MLflow client
+    client = MlflowClient()
+    
+    # Get the latest version in the specified stage
+    latest_versions = client.get_latest_versions(
+        name=model_name,
+        stages=[stage]
+    )
+    
+    if not latest_versions:
+        raise ValueError(f"No model versions found in stage '{stage}'")
+    
+    # Get the latest version (should be only one per stage)
+    model_details = latest_versions[0]
+    version = model_details.version
+    run_id = model_details.run_id
 
-# Load the model and vectorizer from the model registry and local storage
-# def load_model_and_vectorizer(model_name, model_version, vectorizer_path):
-#     # Set MLflow tracking URI to your server
-#     mlflow.set_tracking_uri("http://ec2-54-167-108-249.compute-1.amazonaws.com:5000/")  # Replace with your MLflow tracking URI
-#     client = MlflowClient()
-#     model_uri = f"models:/{model_name}/{model_version}"
-#     model = mlflow.pyfunc.load_model(model_uri)
-#     with open(vectorizer_path, 'rb') as file:
-#         vectorizer = pickle.load(file)
-   
-#     return model, vectorizer
+    # Check if the run_id matches the one in params.yaml
+    if expected_run_id:
+        if expected_run_id == run_id:
+            logger.info(f"✅ Run ID match confirmed: {run_id}")
+            print(f"Run ID match confirmed: Model version {version} run ID ({run_id}) matches params.yaml")
+        else:
+            logger.warning(f"⚠️ Run ID mismatch! Expected: {expected_run_id}, Actual: {run_id}")
+            print(f"WARNING: Run ID mismatch! Expected: {expected_run_id}, Actual: {run_id}")
+    else:
+        logger.info(f"No run_id specified in params.yaml for comparison. Using model with run_id: {run_id}")
 
 
+    # Load model directly using run ID and artifact path
+    model_uri = f"models:/{model_name}/{stage}"
+    model = mlflow.pyfunc.load_model(model_uri)
+    
+    vectorizer_path = "../models/tfidf_vectorizer.pkl" 
+    try:
+        with open(vectorizer_path, 'rb') as file:
+            vectorizer = pickle.load(file)
+        logger.info(f"Loaded vectorizer from local path: {vectorizer_path}")
+    except FileNotFoundError:
+        logger.warning(f"Warning: Vectorizer not found at {vectorizer_path}, falling back to artifacts")
+
+    logger.info(f"Loaded model version {version} from {stage} stage, run ID: {run_id}")
+    return model, vectorizer
 
 def load_model(model_path, vectorizer_path):
     """Load the trained model."""
@@ -79,10 +139,12 @@ def load_model(model_path, vectorizer_path):
 
 
 # Initialize the model and vectorizer
-model, vectorizer = load_model("./lgbm_model.pkl", "./tfidf_vectorizer.pkl")  
+model, vectorizer = load_model("../models/lgbm_model.pkl", "../models/tfidf_vectorizer.pkl")
+logger.info(f"Model: {model}")
+logger.info(f"Vectorizer: {vectorizer}")
 
 # Initialize the model and vectorizer
-# model, vectorizer = load_model_and_vectorizer("my_model", "1", "./tfidf_vectorizer.pkl")  # Update paths and versions as needed
+# model, vectorizer = load_model_and_vectorizer()  # Update paths and versions as needed
 
 @app.route('/')
 def home():
