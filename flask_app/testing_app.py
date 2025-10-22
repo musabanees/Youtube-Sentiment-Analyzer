@@ -26,12 +26,12 @@ def test_predict():
             "It's okay, not great but not terrible."
         ]
     }
-    response = requests.post(f"{BASE_URL}/predict", json=data)
+    response = requests.post(f"{BASE_URL}/predict_mlflow", json=data)
     print(f"Status Code: {response.status_code}")
     print(f"Response: {response.text}")
 
-# print("Testing /predict endpoint:")
-# test_predict()
+print("Testing /predict_mlflow endpoint:")
+test_predict()
 
 # %%
 def test_predict_with_timestamps():
@@ -54,5 +54,5 @@ def test_predict_with_timestamps():
     print(f"Status Code: {response.status_code}")
     print(f"Response: {json.dumps(response.json(), indent=2)}")
     
-print("Testing /predict_with_timestamps endpoint:")
-test_predict_with_timestamps()
+# print("Testing /predict_with_timestamps endpoint:")
+# test_predict_with_timestamps()

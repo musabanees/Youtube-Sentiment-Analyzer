@@ -1,3 +1,4 @@
+# %%
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend before importing pyplot
 
@@ -31,7 +32,7 @@ logger = logging.getLogger('youtube_sentiment_api')
 load_dotenv()
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
-
+# %%
 # Define the preprocessing function
 def preprocess_comment(comment):
     """Apply preprocessing transformations to a comment."""
@@ -62,7 +63,7 @@ def preprocess_comment(comment):
         return comment
 
 
-def load_model_and_vectorizer(stage="Production"):
+def load_model_and_vectorizer(alias="latest-model"):
     """
     Load both model and vectorizer from MLflow artifacts by stage.
     Returns model and vectorizer separately.
@@ -79,72 +80,72 @@ def load_model_and_vectorizer(stage="Production"):
     # Get tracking URI from environment variable (.env file)
     tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
     mlflow.set_tracking_uri(tracking_uri)
-    
+
     # Create MLflow client
     client = MlflowClient()
     
-    # Get the latest version in the specified stage
-    latest_versions = client.get_latest_versions(
-        name=model_name,
-        stages=[stage]
-    )
-    
-    if not latest_versions:
-        raise ValueError(f"No model versions found in stage '{stage}'")
-    
-    # Get the latest version (should be only one per stage)
-    model_details = latest_versions[0]
-    version = model_details.version
-    run_id = model_details.run_id
-
-    # Check if the run_id matches the one in params.yaml
-    if expected_run_id:
-        if expected_run_id == run_id:
-            logger.info(f"✅ Run ID match confirmed: {run_id}")
-            print(f"Run ID match confirmed: Model version {version} run ID ({run_id}) matches params.yaml")
-        else:
-            logger.warning(f"⚠️ Run ID mismatch! Expected: {expected_run_id}, Actual: {run_id}")
-            print(f"WARNING: Run ID mismatch! Expected: {expected_run_id}, Actual: {run_id}")
-    else:
-        logger.info(f"No run_id specified in params.yaml for comparison. Using model with run_id: {run_id}")
-
-
-    # Load model directly using run ID and artifact path
-    model_uri = f"models:/{model_name}/{stage}"
-    model = mlflow.pyfunc.load_model(model_uri)
-    
-    vectorizer_path = "../models/tfidf_vectorizer.pkl" 
     try:
+        # Get the model version by alias
+        logger.info(f"Looking up model '{model_name}' with alias '{alias}'")
+        model_version = client.get_model_version_by_alias(name=model_name, alias=alias)
+        print(f"Retrieved model version: {model_version}")
+        # Log details of the retrieved model
+        version = model_version.version
+        run_id = model_version.run_id
+        logger.info(f"Found model version {version} with alias '{alias}' (run_id: {run_id})")
+        
+        # Check if the run_id matches the one in params.yaml
+        if expected_run_id:
+            if expected_run_id == run_id:
+                logger.info(f"✅ Run ID match confirmed: {run_id}")
+                print(f"Run ID match confirmed: Model version {version} run ID ({run_id}) matches params.yaml")
+            else:
+                logger.warning(f"⚠️ Run ID mismatch! Expected: {expected_run_id}, Actual: {run_id}")
+                print(f"WARNING: Run ID mismatch! Expected: {expected_run_id}, Actual: {run_id}")
+        else:
+            logger.info(f"No run_id specified in params.yaml for comparison. Using model with run_id: {run_id}")
+        
+        # Create the model URI using the model version information
+        model_uri = f"models:/{model_version.name}@{alias}"
+        logger.info(f"Loading model from URI: {model_uri}")
+        model = mlflow.pyfunc.load_model(model_uri)
+        
+        # Load vectorizer from local path
+        vectorizer_path = "../models/tfidf_vectorizer.pkl" 
         with open(vectorizer_path, 'rb') as file:
             vectorizer = pickle.load(file)
         logger.info(f"Loaded vectorizer from local path: {vectorizer_path}")
-    except FileNotFoundError:
-        logger.warning(f"Warning: Vectorizer not found at {vectorizer_path}, falling back to artifacts")
 
-    logger.info(f"Loaded model version {version} from {stage} stage, run ID: {run_id}")
-    return model, vectorizer
-
-def load_model(model_path, vectorizer_path):
-    """Load the trained model."""
-    try:
-        with open(model_path, 'rb') as file:
-            model = pickle.load(file)
-        
-        with open(vectorizer_path, 'rb') as file:
-            vectorizer = pickle.load(file)
-      
-        return model, vectorizer
     except Exception as e:
+        logger.error(f"Error loading model or vectorizer: {e}")
         raise
+        
+    return model, vectorizer
+        
 
+# def load_model(model_path, vectorizer_path):
+#     """Load the trained model."""
+#     try:
+#         with open(model_path, 'rb') as file:
+#             model = pickle.load(file)
+        
+#         with open(vectorizer_path, 'rb') as file:
+#             vectorizer = pickle.load(file)
+      
+#         return model, vectorizer
+#     except Exception as e:
+#         raise
+
+
+# # Initialize the model and vectorizer
+# model, vectorizer = load_model("../models/lgbm_model.pkl", "../models/tfidf_vectorizer.pkl")
+# logger.info(f"Model: {model}")
+# logger.info(f"Vectorizer: {vectorizer}")
 
 # Initialize the model and vectorizer
-model, vectorizer = load_model("../models/lgbm_model.pkl", "../models/tfidf_vectorizer.pkl")
-logger.info(f"Model: {model}")
-logger.info(f"Vectorizer: {vectorizer}")
+model, vectorizer = load_model_and_vectorizer()  # Update paths and versions as needed
 
-# Initialize the model and vectorizer
-# model, vectorizer = load_model_and_vectorizer()  # Update paths and versions as needed
+# %%
 
 @app.route('/')
 def home():
@@ -186,36 +187,46 @@ def predict_with_timestamps():
     return jsonify(response)
 
 
-
-@app.route('/predict', methods=['POST'])
-def predict():
+@app.route('/predict_mlflow', methods=['POST'])
+def predict_mlflow():
     data = request.json
     comments = data.get('comments')
-    print("i am the comment: ",comments)
-    print("i am the comment type: ",type(comments))
-    
+
     if not comments:
         return jsonify({"error": "No comments provided"}), 400
 
     try:
-        # Preprocess each comment before vectorizing
+        # Preprocess each comment
         preprocessed_comments = [preprocess_comment(comment) for comment in comments]
         
-        # Transform comments using the vectorizer
+        # Create a DataFrame for MLflow prediction
+        input_df = pd.DataFrame({"text": preprocessed_comments})
+        
+        logger.info(f"Comment: {input_df['text'].values}")
+        
+        # Transform comments using the vectorizer (this was missing!)
         transformed_comments = vectorizer.transform(preprocessed_comments)
-
+        
         # Convert the sparse matrix to dense format
-        dense_comments = transformed_comments.toarray()  # Convert to dense array
+        feature_names = vectorizer.get_feature_names_out()
         
-        # Make predictions
-        predictions = model.predict(dense_comments).tolist()  # Convert to list
+        # Convert to DataFrame with proper column names
+        input_df = pd.DataFrame(
+            transformed_comments.toarray(),
+            columns=feature_names
+        )
         
-        # Convert predictions to strings for consistency
-        # predictions = [str(pred) for pred in predictions]
+        # Use the already loaded model
+        predictions = model.predict(input_df)
+
+        # Convert to list if needed
+        if hasattr(predictions, 'tolist'):
+            predictions = predictions.tolist()
+            
     except Exception as e:
-        return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
+        return jsonify({"error": f"MLflow prediction failed: {str(e)}"}), 500
     
-    # Return the response with original comments and predicted sentiments
+    # Return the same response format as your existing endpoint
     response = [{"comment": comment, "sentiment": sentiment} for comment, sentiment in zip(comments, predictions)]
     return jsonify(response)
 
