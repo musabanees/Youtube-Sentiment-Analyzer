@@ -41,6 +41,7 @@ http://localhost:5000/predict
 - Get the latest model by Tag (Latest), then register the model with its run ID
 - Create the A/B Testing
 - Create the CI/CD
+- Implement OOPs in the code
        
 
 # AWS-CICD-Deployment-with-Github-Actions

@@ -2,10 +2,10 @@
 
 document.addEventListener("DOMContentLoaded", async () => {
   const outputDiv = document.getElementById("output");
-  const API_KEY = 'AIzaSyAHxO8ZCKPLODbhgSQcDV49Bv8cgkOA8Z4';  // Replace with your actual YouTube Data API key
+  const API_KEY = 'AIzaSyAA3gUGMaiKAHJnnE8juwgVURrqHPsoWRo';
   // const API_URL = 'http://my-elb-2062136355.us-east-1.elb.amazonaws.com:80';   
-  // const API_URL = 'http://localhost:5000/';
-  const API_URL = 'http://23.20.221.231:8080/';
+  const API_URL = 'http://localhost:5000/';
+  // const API_URL = 'http://23.20.221.231:8080/';
 
   // Get the current tab's URL
   chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
@@ -47,29 +47,89 @@ document.addEventListener("DOMContentLoaded", async () => {
         const avgSentimentScore = (totalSentimentScore / totalComments).toFixed(2);
 
         // Normalize the average sentiment score to a scale of 0 to 10
-        const normalizedSentimentScore = (((parseFloat(avgSentimentScore) + 1) / 2) * 10).toFixed(2);
+        const normalizedSentimentScore = (((parseFloat(avgSentimentScore) + 1) / 2) * 10).toFixed(1);
 
-        // Add the Comment Analysis Summary section
+        // Calculate percentages
+        const positivePercent = ((sentimentCounts["1"] / totalComments) * 100).toFixed(1);
+        const neutralPercent = ((sentimentCounts["0"] / totalComments) * 100).toFixed(1);
+        const negativePercent = ((sentimentCounts["-1"] / totalComments) * 100).toFixed(1);
+
+        // Calculate engagement quality score
+        const engagementScore = (
+          (sentimentCounts["1"] * 1.0) + 
+          (sentimentCounts["0"] * 0.5) + 
+          (sentimentCounts["-1"] * 0.0)
+        ) / totalComments * 100;
+
+        // Determine benchmark
+        const benchmarkText = normalizedSentimentScore >= 7 ? "Excellent" :
+                              normalizedSentimentScore >= 5 ? "Good" :
+                              normalizedSentimentScore >= 3 ? "Mixed" : "Poor";
+        const benchmarkClass = normalizedSentimentScore >= 7 ? "excellent" :
+                               normalizedSentimentScore >= 5 ? "good" :
+                               normalizedSentimentScore >= 3 ? "mixed" : "poor";
+
+        // Add the Hero Metrics section
         outputDiv.innerHTML += `
-          <div class="section">
-            <div class="section-title">Comment Analysis Summary</div>
-            <div class="metrics-container">
-              <div class="metric">
-                <div class="metric-title">Total Comments</div>
-                <div class="metric-value">${totalComments}</div>
+          <div class="hero-section">
+            <div class="hero-metric">
+              <div class="hero-value">${normalizedSentimentScore}/10</div>
+              <div class="hero-label">Overall Sentiment</div>
+              <div class="hero-badge ${benchmarkClass}">${benchmarkText}</div>
+            </div>
+            <div class="hero-metric">
+              <div class="hero-value">${positivePercent}%</div>
+              <div class="hero-label">Positive Comments</div>
+            </div>
+          </div>
+        `;
+
+        // Add Quick Stats Grid
+        outputDiv.innerHTML += `
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon">Comments</div>
+              <div class="stat-value">${totalComments}</div>
+              <div class="stat-label">Total Comments</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">Users</div>
+              <div class="stat-value">${uniqueCommenters}</div>
+              <div class="stat-label">Unique Commenters</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">Quality</div>
+              <div class="stat-value">${engagementScore.toFixed(0)}%</div>
+              <div class="stat-label">Engagement Quality</div>
+            </div>
+          </div>
+        `;
+
+        // Add AI-Generated Insights
+        outputDiv.innerHTML += `
+          <div class="insights-section">
+            <div class="section-title">Key Insights</div>
+            <ul class="insights-list">
+              ${generateInsights(sentimentCounts, totalComments, sentimentData, positivePercent, negativePercent)}
+            </ul>
+          </div>
+        `;
+
+        // Add Sentiment Breakdown with visual bar
+        outputDiv.innerHTML += `
+          <div class="sentiment-breakdown">
+            <div class="section-title">Sentiment Distribution</div>
+            <div class="sentiment-bar-container">
+              <div class="sentiment-bar">
+                <div class="positive-bar" style="width: ${positivePercent}%">${positivePercent}%</div>
+                <div class="neutral-bar" style="width: ${neutralPercent}%">${neutralPercent}%</div>
+                <div class="negative-bar" style="width: ${negativePercent}%">${negativePercent}%</div>
               </div>
-              <div class="metric">
-                <div class="metric-title">Unique Commenters</div>
-                <div class="metric-value">${uniqueCommenters}</div>
-              </div>
-              <div class="metric">
-                <div class="metric-title">Avg Comment Length</div>
-                <div class="metric-value">${avgWordLength} words</div>
-              </div>
-              <div class="metric">
-                <div class="metric-title">Avg Sentiment Score</div>
-                <div class="metric-value">${normalizedSentimentScore}/10</div>
-              </div>
+            </div>
+            <div class="legend">
+              <span class="legend-item positive">Positive (${sentimentCounts["1"]})</span>
+              <span class="legend-item neutral">Neutral (${sentimentCounts["0"]})</span>
+              <span class="legend-item negative">Negative (${sentimentCounts["-1"]})</span>
             </div>
           </div>
         `;
@@ -104,19 +164,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         // Fetch and display the word cloud inside the wordcloud-container div
         await fetchAndDisplayWordCloud(comments.map(comment => comment.text));
-
-        // Add the top comments section
-        outputDiv.innerHTML += `
-          <div class="section">
-            <div class="section-title">Top 25 Comments with Sentiments</div>
-            <ul class="comment-list">
-              ${predictions.slice(0, 25).map((item, index) => `
-                <li class="comment-item">
-                  <span>${index + 1}. ${item.comment}</span><br>
-                  <span class="comment-sentiment">Sentiment: ${item.sentiment}</span>
-                </li>`).join('')}
-            </ul>
-          </div>`;
       }
     } else {
       outputDiv.innerHTML = "<p>This is not a valid YouTube URL.</p>";
@@ -243,3 +290,39 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 });
+
+// Helper function to generate AI-like insights
+function generateInsights(sentimentCounts, totalComments, sentimentData, positivePercent, negativePercent) {
+  const insights = [];
+  
+  // Sentiment dominance insight
+  if (positivePercent > 70) {
+    insights.push(`<li><strong>Highly positive reception!</strong> ${positivePercent}% of viewers are loving this content.</li>`);
+  } else if (negativePercent > 60) {
+    insights.push(`<li><strong>Controversial content:</strong> ${negativePercent}% negative sentiment indicates strong viewer disagreement.</li>`);
+  } else if (Math.abs(positivePercent - negativePercent) < 20) {
+    insights.push(`<li><strong>Balanced opinions:</strong> Viewers are split with mixed reactions (${positivePercent}% positive vs ${negativePercent}% negative).</li>`);
+  }
+  
+  // Engagement quality insight
+  const engagementScore = (sentimentCounts["1"] * 1.5 + sentimentCounts["0"] * 0.5 + sentimentCounts["-1"] * 1.2) / totalComments * 20;
+  if (engagementScore > 75) {
+    insights.push(`<li><strong>High engagement:</strong> Comments show strong emotional investment from viewers.</li>`);
+  } else if (engagementScore < 40) {
+    insights.push(`<li><strong>Low engagement:</strong> Consider more interactive content to boost viewer participation.</li>`);
+  }
+  
+  // Community health insight
+  if (positivePercent > 50 && negativePercent < 25) {
+    insights.push(`<li><strong>Healthy community:</strong> Positive and constructive discussion environment.</li>`);
+  }
+  
+  // Content performance insight
+  if (totalComments > 100) {
+    insights.push(`<li><strong>High activity:</strong> ${totalComments} comments indicate strong viewer interest.</li>`);
+  } else if (totalComments < 20) {
+    insights.push(`<li><strong>Limited feedback:</strong> Consider promoting discussion with engaging questions.</li>`);
+  }
+  
+  return insights.length > 0 ? insights.join('') : '<li>Analysis complete - check the metrics above for detailed insights.</li>';
+}

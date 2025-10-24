@@ -2,8 +2,31 @@
 # dvc exp run -S experiments.Model=random_forest
 # dvc exp run -S experimen
 
+# dev:
+# Purpose: Active experimentation, trying new ideas, breaking things
+# When to use: 
+# - Testing new models/features
+# - Hyperparameter tuning
+# - Data exploration
+# - Feature engineering
+
+# acc:
+# Purpose: Validate production-ready models
+# When to use:
+# - Testing model that performed well in dev
+# - Integration testing
+# - Performance benchmarking
+# - A/B testing candidates
+
+# prd:
+# Purpose: Serve the best validated model
+# When to use:
+# - Deploying thoroughly tested models
+# - Serving predictions to users
+# - Monitoring model performance
+
 # Current active environment 
-active_environment: dev
+active_environment: prd
 
 environments:
   dev: # Build & Experimentation Environment
@@ -28,7 +51,7 @@ environments:
       name: "LightGBM-Sentiment"
       stage: "Production" 
       alias: "latest-model"
-      run_id: 1c7aa37e8cd047ad81b4737aaa7c3fb4
+      run_id: 839d2bdfdb8e46d0b1312d639d10aaad
 
 Model:
   random_forest:

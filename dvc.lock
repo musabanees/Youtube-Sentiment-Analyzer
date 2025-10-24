@@ -49,8 +49,8 @@ stages:
       size: 4134324
     - path: src/youtube_sentiment/models/model_building.py
       hash: md5
-      md5: 847b6fe48a11ce950cfc2a81d375beb2
-      size: 6637
+      md5: e906d245da2e3ae1fcefc94a952256a7
+      size: 6639
     params:
       params.yaml:
         Model:
@@ -80,7 +80,7 @@ stages:
               class_weight: balanced
               reg_alpha: 0.1
               reg_lambda: 0.1
-        active_environment: dev
+        active_environment: prd
         vectorizers:
           tfidf:
             ngram_range:
@@ -109,7 +109,7 @@ stages:
       size: 3748273
     - path: models/tfidf_vectorizer.pkl
       hash: md5
-      md5: 6a069edf8f0e6c7b8309a6f7206b414b
+      md5: 01b7919d1f21358de0b88b32e37321fb
       size: 29534
   model_evaluation:
     cmd: python src/youtube_sentiment/models/model_evaluation.py
@@ -128,12 +128,12 @@ stages:
       size: 3748273
     - path: models/tfidf_vectorizer.pkl
       hash: md5
-      md5: 6a069edf8f0e6c7b8309a6f7206b414b
+      md5: 01b7919d1f21358de0b88b32e37321fb
       size: 29534
     - path: src/youtube_sentiment/config.py
       hash: md5
-      md5: 259eb639c3a991bdddcb22ce6408154b
-      size: 632
+      md5: 123322e94564361fbf4fd4f495c3b386
+      size: 775
     - path: src/youtube_sentiment/models/model_evaluation.py
       hash: md5
       md5: ef7cc25fe78fd2efb39209d03674f984
@@ -141,12 +141,12 @@ stages:
     outs:
     - path: resources/experiment_info.json
       hash: md5
-      md5: c57ceb167c72550290346af3111388b0
+      md5: 8667d8aa138cc2c941707f68321b281c
       size: 126
   model_registration:
     cmd: python src/youtube_sentiment/models/register_model.py
     deps:
     - path: src/youtube_sentiment/models/register_model.py
       hash: md5
-      md5: 0c64df1d1e3f9951ff66d8b8cf0064e1
-      size: 5230
+      md5: eb51b994c33b0db17bb0fb58a06e70fa
+      size: 5517

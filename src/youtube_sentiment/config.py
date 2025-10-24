@@ -9,6 +9,7 @@ class Tags(BaseModel):
     git_sha: str # Git commit SHA for the current code version that helps in tracking experiments and reproducibility.
     branch: str
     run_id: str | None = None
+    experiment_id: str | None = None
 
     def to_dict(self) -> dict[str, str | None]:
         """Convert the Tags instance to a dictionary."""
@@ -17,4 +18,6 @@ class Tags(BaseModel):
         tags_dict["branch"] = self.branch
         if self.run_id is not None:
             tags_dict["run_id"] = self.run_id
+        if self.experiment_id is not None:
+            tags_dict["experiment_id"] = self.experiment_id
         return tags_dict

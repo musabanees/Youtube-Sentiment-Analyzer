@@ -65,7 +65,7 @@ def load_experiment_info(file_path: str) -> dict:
         logger.error(f"Failed to load experiment info: {e}")
         raise
 
-def register_model(run_id: str, model_name: str, model_alias: str, tags: dict = None) -> str:
+def register_model(run_id: str, model_name: str, model_alias: str) -> str:
     """Register model in MLflow Model Registry.
     
     Args:
@@ -80,21 +80,31 @@ def register_model(run_id: str, model_name: str, model_alias: str, tags: dict = 
     try:
         logger.info(f"🔄 Registering model '{model_name}' from run {run_id}...")
         
+        # Set up a client to work with the model registry
+        client = MlflowClient()
+        # Get experiment ID first
+        run_details = client.get_run(run_id)
+        experiment_id = run_details.info.experiment_id
+        logger.debug(f"Retrieved experiment_id: {experiment_id} for run: {run_id}")
+
+        tags = Tags(git_sha=git_sha, branch=branch, run_id=run_id, experiment_id=experiment_id)
+        tags_dict = tags.to_dict()
+        logger.debug(f"Prepared model tags: {tags_dict}")
+
+        
         # Register the model in MLflow
         ## To-do: add the model name in the params.yaml file under model_registry
+        ## To-do: add lgbm_model names in the params.yaml file under model_registry
         ## Get the latest model by Tag (Latest), then register the model with its run ID
+
         registered_model = mlflow.register_model(
             model_uri=f"runs:/{run_id}/lgbm_model",  # Using lgbm_model as logged in model_evaluation.py
             name=model_name,
-            tags=tags,
+            tags=tags_dict,
         )
         
-        # Get the new version number
         latest_version = registered_model.version
-        logger.info(f"✅ Model registered as version {latest_version}")
-        
-        # Set up a client to work with the model registry
-        client = MlflowClient()
+        logger.info(f"✅ Registered model '{model_name}' with version {latest_version}")
         
         # Set an alias for the latest model
         client.set_registered_model_alias(
@@ -104,11 +114,17 @@ def register_model(run_id: str, model_name: str, model_alias: str, tags: dict = 
         )
         logger.info(f"✅ Set alias '{model_alias}' to version {latest_version}")
 
-        # Transition the model to Production stage
+        # Transition the model to Production stage and other versions to Archived
+        # Example:
+        # Version 4: Stage = Production
+        # Version 3: Stage = Archived
+        # Version 2: Stage = Archived
+        # Version 1: Stage = None
         client.transition_model_version_stage(
             name=model_name,
             version=latest_version,
-            stage="Production"
+            stage="Production",
+            archive_existing_versions=True
         )
         logger.info(f"✅ Transitioned model version {latest_version} to Production stage")
         
@@ -132,12 +148,8 @@ def main():
         # Load experiment info to get the run_id
         run_id = registry_config['run_id']
         
-        # Prepare tags for the model
-        tags = Tags(git_sha=git_sha, branch=branch)
-        tags_dict = tags.to_dict() 
-
         # Register the model
-        version = register_model(run_id, model_name, model_alias, tags_dict)
+        version = register_model(run_id, model_name, model_alias)
 
         # Update the params.yaml file with the new version if needed
         # This would require additional code to write back to params.yaml
