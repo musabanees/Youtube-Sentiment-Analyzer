@@ -165,17 +165,28 @@ def predict_with_timestamps():
         comments = [item['text'] for item in comments_data]
         timestamps = [item['timestamp'] for item in comments_data]
 
-        # Preprocess each comment before vectorizing
+        # Preprocess each comment
         preprocessed_comments = [preprocess_comment(comment) for comment in comments]
         
-        # Transform comments using the vectorizer
-        transformed_comments = vectorizer.transform(preprocessed_comments)
-
-        # Convert the sparse matrix to dense format
-        dense_comments = transformed_comments.toarray()  # Convert to dense array
+        # Create a DataFrame for MLflow prediction
+        input_df = pd.DataFrame({"text": preprocessed_comments})
         
-        # Make predictions
-        predictions = model.predict(dense_comments).tolist()  # Convert to list
+        logger.info(f"Comment: {input_df['text'].values}")
+        
+        # Transform comments using the vectorizer (this was missing!)
+        transformed_comments = vectorizer.transform(preprocessed_comments)
+        
+        # Convert the sparse matrix to dense format
+        feature_names = vectorizer.get_feature_names_out()
+        
+        # Convert to DataFrame with proper column names
+        input_df = pd.DataFrame(
+            transformed_comments.toarray(),
+            columns=feature_names
+        )
+        
+        # Use the already loaded model
+        predictions = model.predict(input_df)
         
         # Convert predictions to strings for consistency
         predictions = [str(pred) for pred in predictions]
@@ -187,7 +198,7 @@ def predict_with_timestamps():
     return jsonify(response)
 
 
-@app.route('/predict_mlflow', methods=['POST'])
+@app.route('/predict', methods=['POST'])
 def predict_mlflow():
     data = request.json
     comments = data.get('comments')
