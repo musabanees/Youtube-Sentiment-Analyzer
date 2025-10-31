@@ -148,5 +148,5 @@ stages:
     deps:
     - path: src/youtube_sentiment/models/register_model.py
       hash: md5
-      md5: eb51b994c33b0db17bb0fb58a06e70fa
-      size: 5517
+      md5: b092c07835e10982ab509d5cf09f1e29
+      size: 5809

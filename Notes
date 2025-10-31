@@ -1,0 +1,151 @@
+Repository notes — actual current state (no `src/serving` present)
+
+Summary
+-------
+This project currently does not contain a `src/serving` package. The HTTP API implementation (serving code) is located inside the `flask_app/` folder (contains `app.py` and `testing_app.py`). `run.py` at the repository root currently references `src.serving.app` (an app factory), which is not present — therefore `run.py` will fail until you either create `src/serving` or update `run.py` to use `flask_app`.
+
+Top-level layout (actual)
+-------------------------
+- `flask_app/` — current serving code. Files:
+  - `app.py` — main Flask app with routes and model-loading logic
+  - `testing_app.py` — test helper or alternate app runner
+- `src/youtube_sentiment/` — training, preprocessing, model-building and registration code (experimentation)
+- `models/` — local model artifacts (used for local dev; not required if loading from MLflow/S3)
+- `pyproject.toml` — dependencies and packaging
+- `run.py` — repo-level entry point (currently imports `src.serving.app`) — needs update or replacement unless `src/serving` is added
+- `Dockerfile` — production image spec (builds and runs `flask_app` via gunicorn in its current form)
+- `.env`, `params.yaml`, `tests/`, `notebooks/`, `data/`, etc.
+
+Current serving implementation
+-----------------------------
+- Where it lives: `flask_app/app.py` contains both routes and service logic (model loading, preprocessing, chart/wordcloud generation). This is fine for now and makes local development simple.
+- How models are loaded: the code attempts to use MLflow to pull models and also has local fallback paths that reference `../models/...`.
+
+Important mismatch to fix
+-------------------------
+- `run.py` imports `create_app` from `src.serving.app`. Since `src/serving` does not exist, running `python run.py` will raise ImportError. Two options:
+  1) Create `src/serving/` with `routes/`, `services/`, and an app factory `app.py` that exposes `create_app()` and move/split `flask_app/app.py` into those modules.
+  2) Keep `flask_app/app.py` as the serving entry point and update `run.py` to import from `flask_app` (or remove `run.py` and use `flask_app/app.py` directly).
+
+Recommendations (minimal changes vs. refactor)
+---------------------------------------------
+- Minimal change (fast):
+  - Edit `run.py` to import/run `flask_app.app` (or call `flask_app.app.run(...)`) so `run.py` works immediately for local and Docker runs.
+
+- Refactor (recommended for long-term maintainability):
+  - Create `src/serving/` with `routes/` and `services/` per the project's notes. Move the route definitions into `src/serving/routes/*.py` as blueprints and place model-loading/prediction logic into `src/serving/services/*.py`.
+  - Implement an app factory in `src/serving/app.py` that returns a Flask app and registers the blueprints. Keep `run.py` at repo root to call this factory. This keeps source code packaged under `src/` and makes imports consistent (`from src.serving...`).
+
+What to include in the Notes now
+--------------------------------
+I updated these Notes to reflect the actual state. Key points to keep in the file:
+- `flask_app/` is the current serving location
+- `run.py` and `src/serving` mismatch must be addressed
+- Dockerfile currently runs `flask_app` with Gunicorn (so container builds are aligned with the current layout)
+
+Quick commands & checks
+----------------------
+- Run locally (current layout):
+  ```powershell
+  # activate virtualenv
+  .\.venv\Scripts\activate
+  pip install -e .[dev]
+  python flask_app/app.py
+  ```
+
+- Run `run.py` safely (if you choose the minimal-change option, first patch `run.py`):
+  ```powershell
+  # edit run.py to import from flask_app
+  python run.py
+  ```
+
+- Build Docker image (Dockerfile already expects `flask_app`):
+  ```powershell
+  docker build -t youtube-sentiment-api .
+  docker run -p 5000:5000 --env-file .env youtube-sentiment-api
+  ```
+
+Next steps I can take for you
+----------------------------
+Pick one and I'll implement it:
+1) Update `run.py` to load the app from `flask_app` so run.py works immediately.
+2) Create `src/serving/` and split `flask_app/app.py` into `src/serving/routes/*` and `src/serving/services/*`, then create an app factory and wire `run.py` to it.
+3) Produce a small README in `flask_app/` documenting how to run the dev server and how the fallback local models work.
+
+---
+Last updated: 2025-10-30
+
+
+
+Project notes - structure and runtime expectations
+
+Purpose
+-------
+This file documents how the project is organized and how the serving module is structured so any reader or contributor can quickly understand how the API is wired, where models are loaded from, and what to include in production images.
+
+Top-level layout (important files/folders)
+----------------------------------------
+- `run.py` - entry point for running the service in development/production (kept at repo root). It should import and run the app factory.
+- `Dockerfile` - container build spec (production image). Designed to install dependencies from `pyproject.toml` and run the Flask app via Gunicorn.
+- `pyproject.toml` - pinned project dependencies (used instead of `requirements.txt`).
+- `.env` - runtime environment variables (NOT committed with secrets). Include MLflow/S3 and other keys here in CI/CD or runtime hosts.
+- `params.yaml` - configuration and params referenced by scripts and the app.
+- `src/` - source package(s). Project code lives under `src/` (packaged layout).
+	- `src/serving/` - the API module (see details below).
+	- `src/youtube_sentiment/` - model-training and utilities (experimentation code).
+- `flask_app/` - lightweight Flask app wrapper used by local runs (contains `app.py` and quick dev server). In production the Gunicorn entry points refer to this module.
+- `models/` (optional local cache) - used during local development only; production images do NOT include model artifacts when MLflow + S3 are used.
+- `data/`, `notebooks/`, `tests/`, `dvc.yaml` - experiments, tests, and pipeline configuration.
+
+
+--------------------------------
+- Production behavior: models are loaded from the MLflow Model Registry/S3 at startup (or lazily on first request) using MLflow's `pyfunc.load_model()` with a `models:/<name>@<stage-or-version>` URI. This keeps the Docker image small and allows model updates without rebuilding images.
+- Local development: you may keep `models/tfidf_vectorizer.pkl` and `models/lgbm_model.pkl` for quick local testing, but these files should not be baked into production images when using MLflow/S3.
+- Required runtime env vars (typical):
+	- `MLFLOW_TRACKING_URI` - MLflow tracking server URL
+	- AWS creds for S3 access (e.g., `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optionally `AWS_DEFAULT_REGION`)
+	- Any other secrets/config in `.env` or the runtime environment
+
+Files to copy into the production image (Dockerfile guidance)
+----------------------------------------------------------
+When building the production image we want only what's strictly required to run the app and install dependencies. Include:
+
+- `pyproject.toml` (and `setup.cfg` if present) — dependency metadata
+- `src/` — application code
+- `flask_app/` — flask wrapper (entrypoint module used by Gunicorn)
+- `params.yaml` and `.env` — configuration files (only non-secret values in repo; secrets should be supplied at runtime)
+- `README.md` — optional
+
+Do NOT include model artifacts in the image when you are loading models from MLflow/S3. This keeps the image lightweight and allows model upgrades via MLflow.
+
+Quick run & dev instructions
+----------------------------
+- Local dev (venv):
+	1. Create and activate venv: `python -m venv .venv && .\.venv\Scripts\activate` (Windows PowerShell)
+	2. Install deps: `pip install -e .[dev]`  (installs `pyproject.toml` deps + dev extras)
+	3. Run the app locally for development: `python flask_app/app.py` or `python run.py` (run.py calls the app factory in `src`)
+
+- Run tests:
+	- `python -m pytest tests -v`
+
+- Build Docker image (production):
+	- `docker build -t youtube-sentiment-api .`
+	- `docker run -p 5000:5000 --env-file .env youtube-sentiment-api`
+
+Notes for CI/CD and production deployments
+-----------------------------------------
+- CI should run tests (`pytest`) and static checks before building images.
+- For production, prefer registering and promoting models in MLflow Model Registry. Use an MLflow stage (e.g. `Production`) in the model URI used by the app (e.g. `models:/LightGBM-Sentiment/Production`).
+- Supply sensitive credentials at runtime (container environment variables or secret manager) — do not commit them to the repo.
+
+Troubleshooting tips
+--------------------
+- If the app fails to load a model at startup, check `MLFLOW_TRACKING_URI` and network access to S3.
+- If endpoints time out under Gunicorn, increase `--timeout` or reduce worker count for low-memory hosts.
+
+Short summary
+-------------
+Keep route code minimal (in `src/serving/routes`) and put loading/prediction logic in `src/serving/services`. Keep `run.py` at repo root as a single, simple entrypoint. Load models from MLflow/S3 in production to decouple model lifecycle from the image lifecycle.
+
+---
+Last updated: 2025-10-30

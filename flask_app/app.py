@@ -20,6 +20,7 @@ import pickle
 import yaml
 import logging
 from dotenv import load_dotenv
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(
@@ -32,6 +33,14 @@ logger = logging.getLogger('youtube_sentiment_api')
 load_dotenv()
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
+PROJECT_ROOT = Path(__file__).parent.parent
+
+with open(PROJECT_ROOT / "params.yaml", "r") as f:
+    params = yaml.safe_load(f)
+
+vectorizer_path = PROJECT_ROOT / "models" / "tfidf_vectorizer.pkl"
+with open(vectorizer_path, 'rb') as file:
+    vectorizer = pickle.load(file)
 # %%
 # Define the preprocessing function
 def preprocess_comment(comment):
@@ -68,9 +77,6 @@ def load_model_and_vectorizer(alias="latest-model"):
     Load both model and vectorizer from MLflow artifacts by stage.
     Returns model and vectorizer separately.
     """
-    # Load model info from params.yaml
-    with open("../params.yaml", "r") as f:
-        params = yaml.safe_load(f)
         
     # Extract model registry info from production environment
     registry_config = params["environments"]["prd"]["model_registry"]
@@ -78,7 +84,8 @@ def load_model_and_vectorizer(alias="latest-model"):
     expected_run_id = registry_config.get("run_id")
     
     # Get tracking URI from environment variable (.env file)
-    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
+    # tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
+    tracking_uri = "http://54.156.40.67:5000/"
     mlflow.set_tracking_uri(tracking_uri)
 
     # Create MLflow client
@@ -111,7 +118,6 @@ def load_model_and_vectorizer(alias="latest-model"):
         model = mlflow.pyfunc.load_model(model_uri)
         
         # Load vectorizer from local path
-        vectorizer_path = "../models/tfidf_vectorizer.pkl" 
         with open(vectorizer_path, 'rb') as file:
             vectorizer = pickle.load(file)
         logger.info(f"Loaded vectorizer from local path: {vectorizer_path}")

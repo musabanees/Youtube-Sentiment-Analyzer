@@ -116,3 +116,10 @@ http://localhost:5000/predict
     AWS_ECR_LOGIN_URI = demo>>  566373416292.dkr.ecr.ap-south-1.amazonaws.com
 
     ECR_REPOSITORY_NAME = simple-app
+
+
+
+
+docker build --no-cache -t sentiment-api .
+
+docker run -d -p 5000:5000 --name sentiment-container sentiment-api

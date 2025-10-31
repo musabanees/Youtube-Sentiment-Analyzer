@@ -1,0 +1,40 @@
+# .dockerignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Don't copy training/experiment code
+src/
+notebooks/
+tests/
+data/
+
+# Don't copy development files
+.git/
+.gitignore
+.vscode/
+.idea/
+*.md
+!README.md
+
+# Don't copy local configs
+.env.local
+.env.development
+*.log
+
+# Don't copy unnecessary model files (if loading from MLflow)
+# models/*.pkl
+# But we DO need tfidf_vectorizer.pkl, so don't ignore it
+models/*
+!models/tfidf_vectorizer.pkl
+
+# Misc
+.DS_Store
+Thumbs.db

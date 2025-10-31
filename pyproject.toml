@@ -21,6 +21,7 @@ dependencies = [
     "wordcloud==1.9.3",
     "seaborn==0.13.2",
     "loguru==0.7.3",
+    "boto3",
     "python-dotenv==1.1.1",
 ]
 
@@ -41,8 +42,8 @@ build-backend = "setuptools.build_meta"
 
 # This section tells the build tool (setuptools) where to find your actual Python code.
 [tool.setuptools.packages.find]
-where = ["src"] # Look for packages in the 'src' directory
-include = ["youtube_sentiment*"] # Find any package that starts with 'youtube_sentiment'
+#where = ["src"] # Look for packages in the 'src' directory
+#include = ["youtube_sentiment*"] # Find any package that starts with 'youtube_sentiment'
 
 # This section configures the testing tool, pytest.
 [tool.pytest.ini_options]
