@@ -15,12 +15,14 @@ import pandas as pd
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from mlflow.tracking import MlflowClient
+import mlflow.artifacts
 import matplotlib.dates as mdates
 import pickle
 import yaml
 import logging
 from dotenv import load_dotenv
 from pathlib import Path
+import boto3
 
 # Configure logging
 logging.basicConfig(
@@ -71,85 +73,44 @@ def preprocess_comment(comment):
         print(f"Error in preprocessing comment: {e}")
         return comment
 
-
-def load_model_and_vectorizer(alias="latest-model"):
-    """
-    Load both model and vectorizer from MLflow artifacts by stage.
-    Returns model and vectorizer separately.
-    """
-        
-    # Extract model registry info from production environment
-    registry_config = params["environments"]["prd"]["model_registry"]
-    model_name = registry_config["name"]
-    expected_run_id = registry_config.get("run_id")
-    
-    # Get tracking URI from environment variable (.env file)
-    # tracking_uri = os.environ.get("MLFLOW_TRACKING_URI")
-    tracking_uri = "http://54.156.40.67:5000/"
-    mlflow.set_tracking_uri(tracking_uri)
-
-    # Create MLflow client
-    client = MlflowClient()
-    
+def load_model_and_vectorizer():
+    """Load model and vectorizer from same MLflow run"""
     try:
-        # Get the model version by alias
-        logger.info(f"Looking up model '{model_name}' with alias '{alias}'")
-        model_version = client.get_model_version_by_alias(name=model_name, alias=alias)
-        print(f"Retrieved model version: {model_version}")
-        # Log details of the retrieved model
-        version = model_version.version
-        run_id = model_version.run_id
-        logger.info(f"Found model version {version} with alias '{alias}' (run_id: {run_id})")
+        prd_config = params["environments"]["prd"]
+        s3_config = prd_config["s3"]
+        registry_config = prd_config["model_registry"]
         
-        # Check if the run_id matches the one in params.yaml
-        if expected_run_id:
-            if expected_run_id == run_id:
-                logger.info(f"✅ Run ID match confirmed: {run_id}")
-                print(f"Run ID match confirmed: Model version {version} run ID ({run_id}) matches params.yaml")
-            else:
-                logger.warning(f"⚠️ Run ID mismatch! Expected: {expected_run_id}, Actual: {run_id}")
-                print(f"WARNING: Run ID mismatch! Expected: {expected_run_id}, Actual: {run_id}")
-        else:
-            logger.info(f"No run_id specified in params.yaml for comparison. Using model with run_id: {run_id}")
+        bucket = s3_config["bucket"]
+        experiment_id = registry_config["experiment_id"]
+        run_id = registry_config["run_id"]
+        model_artifact = registry_config["model_artifact_name"]
+        vectorizer_artifact = registry_config["vectorizer_artifact_name"]
         
-        # Create the model URI using the model version information
-        model_uri = f"models:/{model_version.name}@{alias}"
-        logger.info(f"Loading model from URI: {model_uri}")
-        model = mlflow.pyfunc.load_model(model_uri)
+        # Base path for this run's artifacts
+        base_s3_uri = f"s3://{bucket}/{experiment_id}/{run_id}/artifacts"
         
-        # Load vectorizer from local path
-        with open(vectorizer_path, 'rb') as file:
-            vectorizer = pickle.load(file)
-        logger.info(f"Loaded vectorizer from local path: {vectorizer_path}")
-
+        # Load model
+        model_s3_uri = f"{base_s3_uri}/{model_artifact}"
+        logger.info(f"Loading model from: {model_s3_uri}")
+        model = mlflow.pyfunc.load_model(model_s3_uri)
+        logger.info("✅ Model loaded")
+        
+        # Load vectorizer (same run)
+        vectorizer_s3_uri = f"{base_s3_uri}/{vectorizer_artifact}"
+        logger.info(f"Loading vectorizer from: {vectorizer_s3_uri}")
+        
+        local_path = mlflow.artifacts.download_artifacts(vectorizer_s3_uri)
+        with open(local_path, 'rb') as f:
+            vectorizer = pickle.load(f)
+        logger.info("✅ Vectorizer loaded")
+        
+        return model, vectorizer
+        
     except Exception as e:
-        logger.error(f"Error loading model or vectorizer: {e}")
+        logger.error(f"Error: {e}")
         raise
-        
-    return model, vectorizer
-        
 
-# def load_model(model_path, vectorizer_path):
-#     """Load the trained model."""
-#     try:
-#         with open(model_path, 'rb') as file:
-#             model = pickle.load(file)
-        
-#         with open(vectorizer_path, 'rb') as file:
-#             vectorizer = pickle.load(file)
-      
-#         return model, vectorizer
-#     except Exception as e:
-#         raise
-
-
-# # Initialize the model and vectorizer
-# model, vectorizer = load_model("../models/lgbm_model.pkl", "../models/tfidf_vectorizer.pkl")
-# logger.info(f"Model: {model}")
-# logger.info(f"Vectorizer: {vectorizer}")
-
-# Initialize the model and vectorizer
-model, vectorizer = load_model_and_vectorizer()  # Update paths and versions as needed
+model, vectorizer = load_model_and_vectorizer()  
 
 # %%
 

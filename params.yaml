@@ -47,11 +47,17 @@ environments:
   prd: # Production Environment
     Model: lightgbm
     vectorizers: tfidf 
+    s3:
+      bucket: "mlflow-firstdemo-01"
     model_registry:
+      experiment_id: "161489319589913247"  # or experiment_name
+      run_id: "839d2bdfdb8e46d0b1312d639d10aaad"
+      model_artifact_name: "lgbm_model"
       name: "LightGBM-Sentiment"
       stage: "Production" 
       alias: "latest-model"
-      run_id: 839d2bdfdb8e46d0b1312d639d10aaad
+      vectorizer_artifact_name: "tfidf_vectorizer.pkl"  # Full S3 key
+
 
 Model:
   random_forest:

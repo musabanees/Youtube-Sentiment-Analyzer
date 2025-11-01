@@ -123,3 +123,5 @@ http://localhost:5000/predict
 docker build --no-cache -t sentiment-api .
 
 docker run -d -p 5000:5000 --name sentiment-container sentiment-api
+
+docker run -p 5000:5000 --env-file .env sentiment-api
