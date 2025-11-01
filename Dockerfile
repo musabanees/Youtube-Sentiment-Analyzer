@@ -32,7 +32,6 @@ RUN pip install --no-cache-dir . && \
 # 8. Copy runtime files
 COPY --chown=appuser:appgroup flask_app/ flask_app/
 COPY --chown=appuser:appgroup params.yaml ./
-COPY --chown=appuser:appgroup models/tfidf_vectorizer.pkl models/
 
 # 9. Switch to unprivileged user
 USER appuser
