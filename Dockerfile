@@ -37,15 +37,15 @@ COPY --chown=appuser:appgroup params.yaml ./
 USER appuser
 
 # 10. Expose port
-EXPOSE 5000
+EXPOSE 8080
 
 # 11. Healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:5000/ || exit 1
+  CMD curl -f http://localhost:8080/ || exit 1
 
 # 12. Run with Gunicorn (production)
 CMD ["gunicorn", \
-     "--bind", "0.0.0.0:5000", \
+     "--bind", "0.0.0.0:8080", \
      "--workers", "4", \
      "--threads", "2", \
      "--timeout", "120", \
