@@ -12,18 +12,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
       
-      - name: Login to ECR
-        run: |
-          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ECR_LOGIN_URI }}
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
       
-      - name: Build Docker Image
+      - name: Build, tag, and push staging image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
+          IMAGE_TAG: staging
         run: |
-          docker build -t sentiment-api:staging .
-      
-      - name: Tag and Push to ECR
-        run: |
-          docker tag sentiment-api:staging ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:staging
-          docker push ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:staging
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
       
       - name: Stop old staging container
         run: |
@@ -31,8 +31,11 @@ jobs:
           docker rm cnncls-staging 2>/dev/null || true
       
       - name: Pull and run staging container on port 8081
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
         run: |
-          docker pull ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:staging
+          docker pull $ECR_REGISTRY/$ECR_REPOSITORY:staging
           docker run -d \
             -p 8081:8080 \
             --name=cnncls-staging \
@@ -40,7 +43,7 @@ jobs:
             -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
             -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
             -e AWS_REGION=${{ secrets.AWS_REGION }} \
-            ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:staging
+            $ECR_REGISTRY/$ECR_REPOSITORY:staging
       
       - name: Wait for container to start
         run: sleep 15
