@@ -334,9 +334,9 @@ def generate_trend_graph():
         plt.figure(figsize=(12, 6))
 
         colors = {
-            -1: 'red',     # Negative sentiment
-            0: 'gray',     # Neutral sentiment
-            1: 'green'     # Positive sentiment
+            -1: 'red',     
+            0: 'gray',     
+            1: 'green'     
         }
 
         for sentiment_value in [-1, 0, 1]:
