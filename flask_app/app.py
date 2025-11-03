@@ -23,6 +23,7 @@ import logging
 from dotenv import load_dotenv
 from pathlib import Path
 import boto3
+import nltk
 
 # Configure logging
 logging.basicConfig(
@@ -113,7 +114,7 @@ model, vectorizer = load_model_and_vectorizer()
 
 @app.route('/')
 def home():
-    return "Welcome to our flask api - Staging Test!"
+    return "Welcome to our flask api -  Test!"
 
 
 @app.route('/predict_with_timestamps', methods=['POST'])
@@ -289,6 +290,8 @@ def generate_wordcloud():
 
 @app.route('/generate_trend_graph', methods=['POST'])
 def generate_trend_graph():
+    nltk.download('stopwords')
+
     try:
         data = request.get_json()
         sentiment_data = data.get('sentiment_data')
