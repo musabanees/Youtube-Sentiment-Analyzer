@@ -1,0 +1,61 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ECR_LOGIN_URI }}
+      
+      - name: Build Docker Image
+        run: |
+          docker build -t sentiment-api:staging .
+      
+      - name: Tag and Push to ECR
+        run: |
+          docker tag sentiment-api:staging ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:staging
+          docker push ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:staging
+      
+      - name: Stop old staging container
+        run: |
+          docker stop cnncls-staging 2>/dev/null || true
+          docker rm cnncls-staging 2>/dev/null || true
+      
+      - name: Pull and run staging container on port 8081
+        run: |
+          docker pull ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:staging
+          docker run -d \
+            -p 8081:8080 \
+            --name=cnncls-staging \
+            --restart unless-stopped \
+            -e AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
+            -e AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+            -e AWS_REGION=${{ secrets.AWS_REGION }} \
+            ${{ secrets.AWS_ECR_LOGIN_URI }}/${{ secrets.ECR_REPOSITORY_NAME }}:staging
+      
+      - name: Wait for container to start
+        run: sleep 15
+      
+      - name: Health check
+        run: |
+          if curl -f http://localhost:8081/; then
+            echo "✅ STAGING DEPLOYED SUCCESSFULLY"
+            echo "🌐 Access at: http://54.156.40.67:8081"
+          else
+            echo "❌ STAGING DEPLOYMENT FAILED"
+            docker logs cnncls-staging --tail 50
+            exit 1
+          fi
+      
+      - name: Cleanup old images
+        if: success()
+        run: docker system prune -f
