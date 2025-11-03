@@ -40,9 +40,6 @@ PROJECT_ROOT = Path(__file__).parent.parent
 with open(PROJECT_ROOT / "params.yaml", "r") as f:
     params = yaml.safe_load(f)
 
-vectorizer_path = PROJECT_ROOT / "models" / "tfidf_vectorizer.pkl"
-with open(vectorizer_path, 'rb') as file:
-    vectorizer = pickle.load(file)
 # %%
 # Define the preprocessing function
 def preprocess_comment(comment):
