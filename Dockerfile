@@ -29,6 +29,9 @@ COPY pyproject.toml README.md* ./
 RUN pip install --no-cache-dir . && \
     pip install --no-cache-dir gunicorn
 
+# 7. Download NLTK data as root (BEFORE switching user)
+RUN python -c "import nltk; nltk.download('stopwords', download_dir='/usr/local/share/nltk_data'); nltk.download('wordnet', download_dir='/usr/local/share/nltk_data')"
+
 # 8. Copy runtime files
 COPY --chown=appuser:appgroup flask_app/ flask_app/
 COPY --chown=appuser:appgroup params.yaml ./
