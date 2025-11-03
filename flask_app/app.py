@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 import boto3
 import nltk
+nltk.download('stopwords')
 
 # Configure logging
 logging.basicConfig(
@@ -290,7 +291,6 @@ def generate_wordcloud():
 
 @app.route('/generate_trend_graph', methods=['POST'])
 def generate_trend_graph():
-    nltk.download('stopwords')
 
     try:
         data = request.get_json()
