@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 import boto3
 import nltk
-nltk.download('stopwords')
+# nltk.download('stopwords')
 
 # Configure logging
 logging.basicConfig(
