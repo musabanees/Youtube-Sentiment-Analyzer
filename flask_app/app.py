@@ -113,8 +113,7 @@ model, vectorizer = load_model_and_vectorizer()
 
 @app.route('/')
 def home():
-    return "Welcome to our flask api"
-
+    return "Welcome to our flask api - Staging Test!"
 
 
 @app.route('/predict_with_timestamps', methods=['POST'])
